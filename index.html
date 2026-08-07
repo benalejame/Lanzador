@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lanzador de WebApps</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 1.25rem;
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 1.25rem;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    .app-card {
+      background-color: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: var(--radius);
+      padding: 1rem;
+      text-decoration: none;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      aspect-ratio: 1 / 1;
+      transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s, opacity 0.2s;
+      cursor: grab;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app-card.is-reordering {
+      opacity: 0.7;
+      transform: scale(0.95);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+
+    /* Fondo blanco añadido aquí */
+    .icon-wrapper { 
+      width: 72px; 
+      height: 72px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      pointer-events: none; 
+      background-color: #ffffff; 
+      border-radius: 14px;
+    }
+    
+    .icon-wrapper img { width: 100%; height: 100%; object-fit: contain; border-radius: 14px; pointer-events: none; }
+    .app-name { font-size: 1.05rem; font-weight: 600; text-align: center; line-height: 1.2; pointer-events: none; }
+
+    @media (min-width: 600px) {
+      .app-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1.5rem; }
+      .icon-wrapper { width: 84px; height: 84px; }
+      .app-name { font-size: 1.15rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <main class="app-grid" id="grid">
+    <a href="https://benalejame.github.io/Catalogo-extendido/" target="_blank" class="app-card" data-id="catalogo">
+      <div class="icon-wrapper"><img src="Catalogo-extendido.png" alt="Cat&aacute;logo"></div>
+      <span class="app-name">Cat&aacute;logo</span>
+    </a>
+    <a href="https://benalejame.github.io/Turno-PDA/" target="_blank" class="app-card" data-id="turno">
+      <div class="icon-wrapper"><img src="Turno-PDA.png" alt="Turno PDA"></div>
+      <span class="app-name">Turno PDA</span>
+    </a>
+    <a href="https://benalejame.github.io/Financiacion-ECI/" target="_blank" class="app-card" data-id="financiacion">
+      <div class="icon-wrapper"><img src="Financiacion-ECI.png" alt="Financiaci&oacute;n"></div>
+      <span class="app-name">Financiaci&oacute;n</span>
+    </a>
+    <a href="https://benalejame.github.io/Planmy/" target="_blank" class="app-card" data-id="planmy">
+      <div class="icon-wrapper"><img src="Planmy.png" alt="Planmy"></div>
+      <span class="app-name">Planmy</span>
+    </a>
+    <a href="https://removileci.supplia.es/login.xhtml" target="_blank" class="app-card" data-id="removil">
+      <div class="icon-wrapper"><img src="removileci.png" alt="ReMovil ECI"></div>
+      <span class="app-name">ReMovil ECI</span>
+    </a>
+    <a href="https://benalejame.github.io/Scan-EAN2CSV/" target="_blank" class="app-card" data-id="scanean">
+      <div class="icon-wrapper"><img src="Scan-EAN2CSV.png" alt="Scan EAN"></div>
+      <span class="app-name">Scan EAN</span>
+    </a>
+    <a href="https://benalejame.github.io/escanbuscar/" target="_blank" class="app-card" data-id="escanbuscar">
+      <div class="icon-wrapper"><img src="escanbuscar.png" alt="Esc&aacute;nBuscar"></div>
+      <span class="app-name">Esc&aacute;nBuscar</span>
+    </a>
+  </main>
+
+  <script>
+    const grid = document.getElementById('grid');
+    let draggedItem = null;
+    let isReorderMode = false;
+    let pressTimer = null;
+    const LONG_PRESS_DURATION = 600;
+
+    const savedOrder = JSON.parse(localStorage.getItem('app_launcher_order'));
+    if (savedOrder) {
+      savedOrder.forEach(id => {
+        const card = grid.querySelector(`[data-id="${id}"]`);
+        if (card) grid.appendChild(card);
+      });
+    }
+
+    function saveOrder() {
+      const currentOrder = Array.from(grid.children).map(c => c.dataset.id);
+      localStorage.setItem('app_launcher_order', JSON.stringify(currentOrder));
+    }
+
+    window.oncontextmenu = (e) => e.preventDefault();
+
+    grid.addEventListener('touchstart', (e) => {
+      const card = e.target.closest('.app-card');
+      if (!card) return;
+
+      pressTimer = setTimeout(() => {
+        isReorderMode = true;
+        draggedItem = card;
+        card.classList.add('is-reordering');
+        if (navigator.vibrate) navigator.vibrate(50);
+      }, LONG_PRESS_DURATION);
+    }, { passive: true });
+
+    grid.addEventListener('touchmove', (e) => {
+      if (!isReorderMode) return;
+      e.preventDefault();
+      
+      const touch = e.touches[0];
+      const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.app-card');
+
+      if (target && target !== draggedItem) {
+        const rect = target.getBoundingClientRect();
+        const next = (touch.clientY - rect.top) / rect.height > 0.5;
+        grid.insertBefore(draggedItem, next ? target.nextSibling : target);
+      }
+    }, { passive: false });
+
+    grid.addEventListener('touchend', (e) => {
+      clearTimeout(pressTimer);
+      if (isReorderMode) {
+        draggedItem.classList.remove('is-reordering');
+        draggedItem = null;
+        isReorderMode = false;
+        saveOrder();
+      }
+    });
+
+    grid.addEventListener('click', (e) => {
+      if (isReorderMode) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+  </script>
+</body>
+</html>
